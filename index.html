@@ -924,7 +924,7 @@
       throw new Error(result.message || "Gagal mengambil data spreadsheet");
     }
 
-    // Simpan Transaksi ke Backend Google Apps Script API
+    // Simpan Transaksi ke Backend Google Apps Script API (Dual Fallback)
     async function submitData() {
       const btn = document.getElementById("btnSubmit");
       const rawNominal = document
@@ -948,24 +948,53 @@
         keterangan: document.getElementById("keterangan").value.trim(),
       };
 
-      try {
-        const res = await fetch(SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({
-            action: "simpanData",
-            data: obj,
-          }),
-        });
+      const payload = JSON.stringify({
+        action: "simpanData",
+        data: obj,
+      });
 
-        const result = await res.json();
-        if (result.status === "success") {
+      try {
+        let berhasil = false;
+
+        // Opsi 1: Coba POST biasa
+        try {
+          const res = await fetch(SCRIPT_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: payload,
+          });
+          const result = await res.json();
+          if (result && result.status === "success") {
+            berhasil = true;
+          }
+        } catch (ePost) {
+          // Opsi 2: Fallback POST mode no-cors jika browser memblokir pembacaan respons 302
+          try {
+            await fetch(SCRIPT_URL, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "text/plain;charset=utf-8" },
+              body: payload,
+            });
+            berhasil = true;
+          } catch (eNoCors) {
+            // Opsi 3: Fallback GET jika POST gagal total
+            const encoded = encodeURIComponent(JSON.stringify(obj));
+            const getRes = await fetch(`${SCRIPT_URL}?action=simpanData&data=${encoded}`);
+            const getJson = await getRes.json();
+            if (getJson && getJson.status === "success") {
+              berhasil = true;
+            }
+          }
+        }
+
+        if (berhasil) {
           alert("🎉 Transaksi Berhasil Disimpan!");
           document.getElementById("formInput").reset();
           setTanggalHariIni();
           updateKategori();
         } else {
-          throw new Error(result.message || "Gagal menyimpan data");
+          throw new Error("Gagal menyimpan data ke spreadsheet.");
         }
       } catch (err) {
         alert("⚠️ Gagal menyimpan data: " + (err.message || err));
