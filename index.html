@@ -1379,60 +1379,66 @@
           const tglMulaiVal = document.getElementById("tglMulai").value;
           const tglSampaiVal = document.getElementById("tglSampai").value;
 
-          let filteredData = [...data].filter((r) => {
-            if (!r[0]) return false;
-            const p = r[0].split("/");
-            if (p.length < 3) return false;
+          // Simpan indeks asli (urutan baris sheet) agar input terbaru pada tanggal yang sama muncul di paling atas
+          let filteredData = data
+            .map((r, index) => ({ row: r, originalIndex: index }))
+            .filter(({ row: r }) => {
+              if (!r[0]) return false;
+              const p = r[0].split("/");
+              if (p.length < 3) return false;
 
-            const dData = new Date(
-              parseInt(p[2], 10),
-              parseInt(p[1], 10) - 1,
-              parseInt(p[0], 10),
-            );
-            dData.setHours(0, 0, 0, 0);
+              const dData = new Date(
+                parseInt(p[2], 10),
+                parseInt(p[1], 10) - 1,
+                parseInt(p[0], 10),
+              );
+              dData.setHours(0, 0, 0, 0);
 
-            let dateMatch = false;
+              let dateMatch = false;
 
-            if (fBulan === "Custom") {
-              if (!tglMulaiVal || !tglSampaiVal) {
+              if (fBulan === "Custom") {
+                if (!tglMulaiVal || !tglSampaiVal) {
+                  dateMatch = true;
+                } else {
+                  const dStart = new Date(tglMulaiVal);
+                  dStart.setHours(0, 0, 0, 0);
+                  const dEnd = new Date(tglSampaiVal);
+                  dEnd.setHours(23, 59, 59, 999);
+                  dateMatch =
+                    dData.getTime() >= dStart.getTime() &&
+                    dData.getTime() <= dEnd.getTime();
+                }
+              } else if (fBulan === "Semua") {
                 dateMatch = true;
               } else {
-                const dStart = new Date(tglMulaiVal);
-                dStart.setHours(0, 0, 0, 0);
-                const dEnd = new Date(tglSampaiVal);
-                dEnd.setHours(23, 59, 59, 999);
-                dateMatch =
-                  dData.getTime() >= dStart.getTime() &&
-                  dData.getTime() <= dEnd.getTime();
+                const targetBulan =
+                  fBulan === "Default"
+                    ? (new Date().getMonth() + 1).toString()
+                    : fBulan;
+                dateMatch = parseInt(p[1], 10) === parseInt(targetBulan, 10);
               }
-            } else if (fBulan === "Semua") {
-              dateMatch = true;
-            } else {
-              const targetBulan =
-                fBulan === "Default"
-                  ? (new Date().getMonth() + 1).toString()
-                  : fBulan;
-              dateMatch = parseInt(p[1], 10) === parseInt(targetBulan, 10);
-            }
 
-            const jenisMatch = fJenis === "Semua" || r[1] === fJenis;
-            const kategoriMatch = fKategori === "Semua" || r[3] === fKategori;
-            const cariMatch =
-              !fCari ||
-              (r[3] || "").toLowerCase().includes(fCari) ||
-              (r[4] || "").toLowerCase().includes(fCari);
+              const jenisMatch = fJenis === "Semua" || r[1] === fJenis;
+              const kategoriMatch = fKategori === "Semua" || r[3] === fKategori;
+              const cariMatch =
+                !fCari ||
+                (r[3] || "").toLowerCase().includes(fCari) ||
+                (r[4] || "").toLowerCase().includes(fCari);
 
-            return dateMatch && jenisMatch && kategoriMatch && cariMatch;
+              return dateMatch && jenisMatch && kategoriMatch && cariMatch;
+            });
+
+          // Urutkan data: Tanggal terbaru di atas. Jika tanggal sama, input yang terakhir masuk (baris sheet terbawah) di atas.
+          filteredData.sort((a, b) => {
+            const diffDate = parseDateTimestamp(b.row[0]) - parseDateTimestamp(a.row[0]);
+            if (diffDate !== 0) return diffDate;
+            return b.originalIndex - a.originalIndex;
           });
 
-          // Urutkan data berdasarkan Timestamp asli (Terbaru di atas)
-          filteredData.sort(
-            (a, b) => parseDateTimestamp(b[0]) - parseDateTimestamp(a[0]),
-          );
-          cachedReportData = filteredData; // Simpan untuk export CSV
+          cachedReportData = filteredData.map((item) => item.row); // Simpan untuk export CSV
 
           const html = filteredData
-            .map((r) => {
+            .map(({ row: r }) => {
               const nominal =
                 parseInt(r[2].toString().replace(/\D/g, ""), 10) || 0;
               grandTotal += r[1] === "Masuk" ? nominal : -nominal;
@@ -1499,7 +1505,7 @@
       link.setAttribute("href", encodedUri);
       link.setAttribute(
         "download",
-        `Laporan_Keuangan_${new Date().toISOString().split("T")[0]}.csv`,
+        `Laporan_Keuangan_${new Date().toISOString().split("T")[0]}.csv`
       );
       document.body.appendChild(link);
       link.click();
